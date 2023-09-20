@@ -1,0 +1,92 @@
+---
+- hosts: all
+  remote_user: notme
+  become: true
+  vars_files:
+    - vars/default.yml
+
+  tasks:
+    - name: install dependencies
+      apt:
+        name: "{{item}}"
+        state: present
+        update_cache: yes
+      loop:
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - gnupg-agent
+        - software-properties-common
+
+    - name: add GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: add docker repository to apt
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu bionic stable
+        state: present
+
+    - name: install docker
+      apt:
+        name: "{{item}}"
+        state: latest
+        update_cache: yes
+      loop:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+
+    - name: check docker is active
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Ensure group "docker" exists
+      ansible.builtin.group:
+        name: docker
+        state: present
+
+    - name: adding notme to docker group
+      user:
+        name: notme
+        groups: docker
+        append: yes
+
+    - name: Install docker-compose
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.21.0/docker-compose-linux-x86_64
+        dest: /usr/local/bin/docker-compose
+        mode: 'u+x,g+x'
+
+    - name: Change file ownership, group and permissions
+      ansible.builtin.file:
+        path: /usr/local/bin/docker-compose
+        owner: notme
+        group: notme
+
+    - name: Clone repository
+      git:
+        repo: "{{ download_app_link }}"
+        dest: "{{ download_dest }}"
+
+    - name: copy file composer.json.dist
+      copy:
+        src: "{{ download_dest }}/web/app/composer.json.dist"
+        dest: "{{ download_dest }}/web/app/composer.json"
+        remote_src: yes
+
+    - name: Replace the default
+      replace:
+        path: "{{ download_dest }}/.env"
+        regexp: '^PHP_VERSION=latest'
+        replace: 'PHP_VERSION=8.1'
+        backup: yes
+
+    - name: Run container
+      become: True
+      shell:
+        cmd: "docker-compose up -d"
+        chdir: "{{ download_dest }}"
