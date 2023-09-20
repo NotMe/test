@@ -1,0 +1,3 @@
+---
+download_app_link: "https://github.com/nanoninja/docker-nginx-php-mysql.git"
+download_dest: "/tmp/docker-nginx-php-mysql"
